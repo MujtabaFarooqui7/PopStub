@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 
-const KEY = "8cf5f69d";
+export const OMDB_URL = `https://www.omdbapi.com/?apikey=${process.env.REACT_APP_OMDB_KEY}`;
+export const MIN_QUERY_LENGTH = 3;
 
 export function useMovies(query, callback) {
   const [movies, setMovies] = useState([]);
@@ -16,34 +17,38 @@ export function useMovies(query, callback) {
           setIsLoading(true);
           setError("");
           const res = await fetch(
-            `http://www.omdbapi.com/?apikey=${KEY}&s=${query}`,
+            `${OMDB_URL}&s=${encodeURIComponent(query)}`,
             { signal: controller.signal },
           );
-          if (!res.ok) throw new Error("Something went wrong");
+          if (!res.ok) throw new Error("The movie service returned an error.");
           const data = await res.json();
-          if (data.Response === "False") throw new Error("Movie not found");
+          if (data.Response === "False") throw new Error(data.Error);
           setMovies(data.Search);
           setError("");
         } catch (err) {
-          if (err.name !== "AbortError") {
-            setError(err.message);
-          }
+          if (err.name === "AbortError") return;
+          setMovies([]);
+          setError(
+            err.name === "TypeError"
+              ? "Can't reach the movie service. Check your connection and try again."
+              : err.message,
+          );
         } finally {
-          setIsLoading(false);
+          if (!controller.signal.aborted) setIsLoading(false);
         }
       }
-      if (query.length < 3) {
+      if (query.length < MIN_QUERY_LENGTH) {
         setMovies([]);
         setError("");
+        setIsLoading(false);
         return;
       }
-      //   handleCloseMovie();
       fetchMovies();
       return function () {
         controller.abort();
       };
     },
-    [query],
+    [query, callback],
   );
   return { movies, isLoading, error };
 }
